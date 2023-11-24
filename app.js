@@ -6,6 +6,11 @@ const queries = require("./database/queriesFunc");
 const config = require("./config");
 const hdWallet = require("tron-wallet-hd");
 
+const bip39 = require("bip39");
+const bitcoin = require("bitcoinjs-lib");
+const HDKey = require("hdkey");
+const CoinKey = require("coinkey");
+
 const app = Router();
 
 // mainnet
@@ -353,7 +358,51 @@ app.get("/get-tron-wallet-from-mnemonics", async function (request, response) {
       wallet: accounts,
     });
   } else {
-    response.status(500).send({ message: "Invalid Mnemonics", mnemonics: seed });
+    response
+      .status(500)
+      .send({ message: "Invalid Mnemonics", mnemonics: seed });
+  }
+});
+
+// Get Address From Mnemonics
+app.get("/get-btc-address-from-mnemonics", async function (req, res) {
+  try {
+    const mnemonic = req.query.mnemonics;
+   
+    // Convert the mnemonic to a seed
+    const seed = bip39.mnemonicToSeedSync(mnemonic);
+
+    // Create an HD wallet key from the seed
+    const hdKey = HDKey.fromMasterSeed(Buffer.from(seed, "hex"));
+
+    // Define the BIP44 path for Bitcoin (m/44'/0'/0'/0/0)
+    const path = "m/44'/0'/0'/0/0";
+
+    // Derive a child key from the HD key using the defined path
+    const child = hdKey.derive(path);
+
+    // Create a CoinKey from the derived child private key and specify the Bitcoin network
+    const coinKey = new CoinKey(child.privateKey, bitcoin.networks.bitcoin);
+
+    // Prepare an object with address, path, private key, and Wallet Import Format (WIF) key
+    const info = {
+      walletAddress: coinKey.publicAddress, // Bitcoin public address
+      path, // BIP44 path
+      walletPrivateKey: coinKey.privateKey.toString("hex"), // Private key in hexadecimal
+      WIF: coinKey.privateWif, // Wallet Import Format (WIF) private key
+    };
+
+    // Log the information to the console
+    res.status(200).send({
+      message: "Mnemonics are correct!",
+      mnemonics: mnemonic,
+      wallet: info,
+    });
+  } catch (e) {
+    res.status(400).send({
+      code: 400,
+      message: `Address could not be fetched, error: ${e}`,
+    });
   }
 });
 
